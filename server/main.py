@@ -30,7 +30,6 @@ LOG_DATABASE = config["log_database"]
 
 BUILD_MIN_CORRECT_COUNT_FOR_FEEDBACK = config["build"]["min_correct_count_for_feedback"]
 BUILD_INCREMENT = config["build"]["increment"]
-BUILD_LANG = config["build"]["language"]
 
 CONDITIONS_ASSIGNMENT = config["conditions"]["assignment"]
 CONDITIONS_INTERVENTION_PROBABILITY = config["conditions"]["intervention_probability"]
@@ -62,7 +61,7 @@ class ExampleIntervention(Resource):
         return models
 
     def log_and_rebuild_model_if_needed(self, event_type, dict):
-        logger = self.get_logger(LOG_DATABASE)
+        logger = self.logger
         dict["ServerTimestamp"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         try:
             client_timestamp = dict["ClientTimestamp"]
@@ -75,15 +74,13 @@ class ExampleIntervention(Resource):
 
     def rebuild_model_if_needed(self, problem_id):
         problem_id = str(problem_id)
-        logger = self.get_logger(LOG_DATABASE)
-        if not logger.should_rebuild_model(problem_id, BUILD_MIN_CORRECT_COUNT_FOR_FEEDBACK, BUILD_INCREMENT):
+        if not self.model_store.should_rebuild_model(problem_id, BUILD_MIN_CORRECT_COUNT_FOR_FEEDBACK, BUILD_INCREMENT):
             return
         try:
-            provider = SQLiteDataProvider(logger.db_path)
+            provider = SQLiteDataProvider(self.logger.db_path)
             dataset = ProgSnap2Dataset(provider)
             builder = CorrectnessModelBuilder(problem_id)
-            builder.lang = BUILD_LANG
-            builder.build(dataset)
+            builder.load_data(dataset)
             model = builder.get_trained_model()
             correct_count = int(builder.X_train[builder.y_train].unique().size)
             self.model_store.set_model(problem_id, model, correct_count)
@@ -110,7 +107,7 @@ class ExampleIntervention(Resource):
             return False
         if CONDITIONS_ASSIGNMENT == "all_intervention":
             return True
-        logger = self.get_logger(LOG_DATABASE)
+        logger = self.logger
         subject_condition = logger.get_or_set_subject_condition(
             subject_id, self.default_condition_is_intervention(subject_id))
         if problem_id in CONDITIONS_INVERSE_PROBLEMS:

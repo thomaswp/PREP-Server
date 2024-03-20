@@ -1,3 +1,7 @@
+# Needed, since this is in a subfolder
+import sys, os
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
+
 import pandas as pd
 from abc import ABC, abstractmethod
 from sklearn.feature_extraction.text import CountVectorizer
@@ -28,13 +32,12 @@ class ModelBuilder(ABC):
         merged = pd.merge(
             submissions, code_states, on=PS2.CodeStateID
         )[[problem_id_column, PS2.Score, code_column]]
-        # For both  models, we only want code with a specific score
+        # We only want code with a specific score
         return merged[~merged[PS2.Score].isna()]
 
-    def build(self, data: ProgSnap2Dataset):
+    def load_data(self, data: ProgSnap2Dataset):
         self.ps2_dataset = data
         submissions = ModelBuilder.get_submissions_table(data, self.submit_columns)
-        self.mean_scores = submissions.groupby(self.problem_id_column).Score.mean()
         assignment_submissions = submissions[submissions[self.problem_id_column] == self.problem_id]
         assignment_code = ModelBuilder.get_code_table(data, assignment_submissions, self.problem_id_column, self.code_column)
 
@@ -58,8 +61,8 @@ class ModelBuilder(ABC):
         pass
 
 class CorrectnessModelBuilder(ModelBuilder):
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
         self.ngram_range = (1,3)
         self.classifier_factory = lambda: XGBClassifier()
         self.token_pattern = r"[\w]+|[^\s]|[ ]{4}"
