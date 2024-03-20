@@ -1,0 +1,3 @@
+[submodule "ps2lib"]
+	path = ps2lib
+	url = https://github.com/thomaswp/ProgSnap2Lib

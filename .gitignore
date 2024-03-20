@@ -1,11 +1,8 @@
-preprocess/data/*
 server/data/*
-!*.dvc
-!*.dvcignore
-preprocess/.ipynb_checkpoints
 __pycache__
 .vscode
 .conda
 myenv/
+.venv
 server/config.yaml
 ssl/
