@@ -1,25 +1,30 @@
-# SimpleAIF
+# PREP-Server
 
-**Description:** SimpleAIF is a basic server for generating feedback based on the input code's similarity to the different forms of the final solution.
+**Programming Replication Experiments Protocol (PREP)** is a *draft* protocol for designing interventions that occur during programming practice, which can be run across different practice environments. Currently support practice environments include:
+* Visual Studio Code
+* PCRS (University of Toronto)
+* Snap (partial, in progress)
+* 
 
-This repository contains code for:
+The PREP-Server is an example server that implements PREP, and includes additional features to aid in the development of interventions:
+* Built-in logging in ProgSnap2 format.
+* Conditional assignment, including support for switching replications designs.
+* The ability to build and update data-driven models on the fly as student submissions come in.
 
-1. ``shared``: code for building SimpleAIF models from ProgSnap2 datasets (CSV or SQLite database) or via HTTP calls.
-2. ``server``: a Python server for giving that feedback as a service.
+For a more advanced example of a PREP intervention, [see SimpleAIF](https://github.com/thomaswp/SimpleAIF).
 
 ## Setup
 
 It is suggested to use VSCode to load this repository and a [virtual environment](https://code.visualstudio.com/docs/python/environments) to manage and install dependencies.
 
-Take the following steps to install SimpleWebIDE.
+Take the following steps to install the PREP-Server.
 
 1. Clone the repo.
 ```bash
 git clone https://github.ncsu.edu/HINTSLab/SimpleAIF.git
 ```
-2. Setup a python 3.9 environment. On Windows this is easiest using [VS Code](https://code.visualstudio.com/docs/python/environments) (you will need to [use CMD](https://code.visualstudio.com/docs/terminal/profiles) rather than Powershell for your termnial) or [Anaconda](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#activating-an-environment), and on Unix pyenv.
+2. Setup a python 3.9 (or greater) environment. On Windows this is easiest using [VS Code](https://code.visualstudio.com/docs/python/environments) (you will need to [use CMD](https://code.visualstudio.com/docs/terminal/profiles) rather than Powershell for your termnial) or [Anaconda](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#activating-an-environment), and on Unix pyenv.
 3. Install the dependencies using the included ``requirements.txt`` file.
-   * **Note**: This only installs the server runtime dependencies: Running the Jupyter notebooks and doing EDA may require additional dependencies, which you can install manually.
 ```bash
 pip install -r requirements.txt
 ```
@@ -28,59 +33,21 @@ pip install -r requirements.txt
 
 ## Serving Feedback
 
-You can run SimpleAIF using the code found in the server folder.
-1. Update ``main.py`` to set the `SYSTEM_ID` variable to your system (e.g., `PCRS`, `iSnap`, `CWO`, `BlockPy`).
-2. Run ``main.py``. It should start a server on port 5000.
-3. If the server fails to start, make sure you're running it from the correct directory (the server directory).
+You can run the server using the code found in the server folder.
+1. Run ``main.py``. It should start a server on port 5500.
+   * If the server fails to start, make sure you're running it from the correct directory (the server directory).
 
-Note that to work, you must build a model, either beforehand, or as the server runs. See instructions below on how to do so.
-
-
-## Building a Model
-
-### Building a Model Using an Existing ProgSnap2 Dataset
-
-```python
-from shared.progsnap import ProgSnap2Dataset
-from shared.database import CSVDataProvider, SQLiteDataProvider
-from shared.preprocess import SimpleAIFBuilder
-from shared.data import SQLiteLogger
-
-# Load a dataset from a folder with CSV files
-dataset = ProgSnap2Dataset(CSVDataProvider(data_folder))
-
-# Or load it from a SQLite database
-dataset = ProgSnap2Dataset(SQLiteDataProvider(database_path))
-
-# Create a builder with relevant parameters and build
-builder = SimpleAIFBuilder(
-    problem_id,
-    code_column=code_column,
-    problem_id_column=problem_id_column
-)
-builder.build(dataset)
-
-# Train the progress model and classifier
-progress_model = builder.get_trained_progress_model()
-classifier = builder.get_trained_classifier()
-
-# Optional: store that model in a database to be used by the server
-logger = SQLiteLogger(database)
-logger.create_tables()
-correct_count = int(builder.X_train[builder.y_train].unique().size)
-logger.set_models(problem_id, progress_model, classifier, correct_count)
-```
+Use a PREP-supporting client to interact with the server.
 
 ### Building a Model On the Fly or Using a Custom Dataset via HTTP Post
 
-If your dataset is not in ProgSnap2 format, or you do not have prior data, you can still use SimpleAIF. You can use the following steps to populate a new ProgSnap2 database and build the model, either as students submit their work, and/or with seed data you already have available.
+If your dataset is not in ProgSnap2 format, or you do not have prior data, you can still use data-driven models. You can use the following steps to populate a new ProgSnap2 database and build the model, either as students submit their work, and/or with seed data you already have available.
 
-1) Change the `SYSTEM_ID` constant in main.py to your system name.
-2) Run `main.py` to start the server (see instructions above).
-3) Add relevant data, with a call similar to the below:
+1) Run `main.py` to start the server (see instructions above).
+2) Add relevant data, with a call similar to the below:
 
 ```python
-url = f"http://127.0.0.1:5000/{row[PS2.EventType]}/"
+url = f"http://127.0.0.1:5500/{row[PS2.EventType]}/"
 x = requests.post(url, json = row_dict)
 ```
 
@@ -90,7 +57,7 @@ Where the `row_dic` is an object with key-value pairs matching the fields descri
 
 SimpleAIF is a data-driven model, and it requires some data from prior students to provide feedback. Ideally, this data is available for some or all problems beforehand (even if generated by an instructor), but if not it can be added at runtime.
 
-Either way, send an HTTP-POST request to `http://127.0.0.1:5000/XXX/`, where XXX is one of the following ProgSnap2 EventTypes (they will have the same result):
+Either way, send an HTTP-POST request to `http://127.0.0.1:5500/XXX/`, where XXX is one of the following ProgSnap2 EventTypes (they will have the same result):
 * `Submit`
 * `FileEdit`
 * `Run.Program`
@@ -124,25 +91,7 @@ Note that currently SimpleAIF will build a feedback model for a given problem wh
 
 For example, if `MIN_CORRECT_COUNT_FOR_FEEDBACK` is 10 and `COMPILE_INCREMENT` is 5, SimpleAIF will build a model after 10 correct responses, and then rebuild it after 15, 20, 25, etc. correct responses.
 
-### Starter Code
-
-If you have starter code for some problems (i.e., students are given a method definition, comments, variables, etc. to start with), you should add this to the database. This will allow the model to ignore any starter code when computing student progress.
-
-If you have a ProgSnap2 dataset, you can put your starter code in the `StarterCode` column of the `Problem.csv` link table.
-
-If building the dataset using HTTP, send an HTTP-POST request to `http://127.0.0.1:5000/X-SetStarterCode/` with the following JSON in the post body:
-* `ProblemID`: The problem ID (e.g., `32` or `sum_of_three`).
-* `StarterCode`: The starter code for the problem (e.g., `def foo():\n\treturn 0`).
-
-For example
-```
-{
-    "ProblemID": "32",
-    "StarterCode": "def foo():\n\treturn 0"
-}
-```
-
-## Deploying the model in production
+## Deploying the server in production
 
 ### Optaining an SSL Certificate
 
@@ -187,22 +136,3 @@ docker run -p <port>:80  -v /<path-on-server>/SimpleAIF/server/data:/app/server/
 5. Verify that `server/data/Logging.db` has been created. This may require you to use the server.
 
 To stop the server, run `docker ps` to get the container ID, and then `docker stop <container_id>`.
-
-
-### Deployment checklist
-
-Before deployment steps (above):
-* Make sure to do a `git pull` to make sure you code is up to date.
-* Make sure your config.yaml is up to date.
-* If using a pre-built model, make sure the model is up-to-date, located in the server/data folder, and that the config.yaml's `model_database` field matches it (without the .db extension).
-
-After deployment steps:
-* Make sure that your client loads the .css file served at `https://<server_url>/static/progress.css`.
-* Test all problems that will be deployed manually to see if they work as expected.
-* Test condition assignment - try logging in with a few different accounts and make sure some see the feedback and others don't.
-  * Make sure the client works well even when no actions are received, e.g. if a user is in the control condition.
-* Test logging: make sure that the server/data/Logging.db database contains entries in the MainEvent and CodeSatates tables.
-  * You can do this via the command line following the instructions [here](https://www.digitalocean.com/community/tutorials/how-to-install-and-use-sqlite-on-ubuntu-20-04).
-  * Try `SELECT * FROM MainEvent;` and `SELECT * FROM CodeStates;` to see if they contain any entries, and make sure they match your testing.
-  * You can also copy the Logging.db to your local machine for inspection.
-* Stop and restart the docker image and verify that the Logging.db persists.
