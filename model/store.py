@@ -21,12 +21,12 @@ class ModelStore(SQLiteLogger):
     def create_models_table(self):
         self._create_table(MODELS_TABLE, MODELS_TABLE_COLUMNS)
 
-    def should_rebuild_model(self, problem_id, min_correct, increment):
+    def should_rebuild_model(self, problem_id, min_count, increment):
         with self._connect() as conn:
             c = conn.cursor()
-            c.execute(f"SELECT COUNT(DISTINCT({PS2.CodeStateID})) FROM {MAIN_TABLE} WHERE ProblemID = ? AND Score = 1", (problem_id,))
+            c.execute(f"SELECT COUNT(DISTINCT({PS2.CodeStateID})) FROM {MAIN_TABLE} WHERE ProblemID = ?", (problem_id,))
             result = c.fetchone()
-            if result is None or result[0] < min_correct:
+            if result is None or result[0] < min_count:
                 return False
             current_correct_count = result[0]
 

@@ -9,8 +9,8 @@ from flask_cors import CORS
 from model.store import ModelStore
 from ps2lib.logger import SQLiteLogger
 from ps2lib.progsnap import ProgSnap2Dataset, PS2, EventType
-from ps2lib.providers import SQLiteDataProvider
-from model.model import CorrectnessModelBuilder
+from interventions.hello_intervention import HelloIntervention
+from interventions.autograder_intervention import AutograderIntervention
 
 app = Flask(__name__)
 CORS(app)
@@ -36,7 +36,7 @@ CONDITIONS_INTERVENTION_PROBABILITY = config["conditions"]["intervention_probabi
 CONDITIONS_INVERSE_PROBLEMS = config["conditions"]["inverse_problems"]
 CONDITIONS_MANUALLY_ASSIGNED_PROBLEMS = config["conditions"]["manually_assigned_problems"]
 
-class ExampleIntervention(Resource):
+class EventManager(Resource):
 
     def __init__(self) -> None:
         super().__init__()
@@ -44,51 +44,55 @@ class ExampleIntervention(Resource):
         logging_database_path = relative_path(f'data/{LOG_DATABASE}.db')
         self.logger = SQLiteLogger(logging_database_path)
         self.logger.create_tables()
+
         # The model store will also use the logging database, for consolidation and
         # since it needs to read the MainTable to determine when a model should be
         # rebuilt
         self.model_store = ModelStore(logging_database_path)
         self.model_store.create_models_table()
 
-        with open(relative_path("templates/feedback.html"),"r") as file:
-            self.feedback_tempalte = '\n'.join(file.readlines())
+        # self.intervention = HelloIntervention()
+        self.intervention = AutograderIntervention(self.model_store)
 
+    def log_and_get_actions_for_event(self, event_type, data):
+        self.log_event(event_type, data)
 
-    def load_model_from_db(self, problem_id):
-        models = self.model_store.get_model(problem_id)
-        if models is None:
-            print(f"Model not found for {problem_id} in {LOG_DATABASE}.db")
-        return models
+        # At a minimum we expect a ProblemID and CodeState
+        if PS2.ProblemID not in data:
+            print("Warning: No ProblemID provided - skipping intervention.")
+            return []
+        if "CodeState" not in data:
+            print("Warning: No CodeState provided - skipping intervention.")
+            return []
+        problem_id = data[PS2.ProblemID]
 
-    def log_and_rebuild_model_if_needed(self, event_type, dict):
+        # Determine whether this is an intervention condition
+        if (PS2.SubjectID in data):
+            subject_id = data[PS2.SubjectID]
+            if (not event_manager.is_intervention_group(subject_id, problem_id)):
+                return []
+        else:
+            print("Warning: No SubjectID provided - defaulting to intervention group.")
+
+        code = data["CodeState"]
+        return self.get_actions_for_event(event_type, data, code)
+
+    def log_event(self, event_type, data):
         logger = self.logger
-        dict["ServerTimestamp"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+        data["ServerTimestamp"] = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         try:
-            client_timestamp = dict["ClientTimestamp"]
-            dict["ClientTimestamp"] = datetime.datetime.strptime(client_timestamp, "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%dT%H:%M:%S")
+            client_timestamp = data["ClientTimestamp"]
+            data["ClientTimestamp"] = datetime.datetime.strptime(client_timestamp, "%Y-%m-%dT%H:%M:%S.%fZ").strftime("%Y-%m-%dT%H:%M:%S")
         except:
             pass
-        logger.log_event(event_type, dict)
-        if "ProblemID" in dict:
-            self.rebuild_model_if_needed(dict["ProblemID"])
+        logger.log_event(event_type, data)
 
-    def rebuild_model_if_needed(self, problem_id):
-        problem_id = str(problem_id)
-        if not self.model_store.should_rebuild_model(problem_id, BUILD_MIN_CORRECT_COUNT_FOR_FEEDBACK, BUILD_INCREMENT):
-            return
-        try:
-            provider = SQLiteDataProvider(self.logger.db_path)
-            dataset = ProgSnap2Dataset(provider)
-            builder = CorrectnessModelBuilder(problem_id)
-            builder.load_data(dataset)
-            model = builder.get_trained_model()
-            correct_count = int(builder.X_train[builder.y_train].unique().size)
-            self.model_store.set_model(problem_id, model, correct_count)
-            print(f"Successfully rebuilt model for {problem_id} with {correct_count} unique correct submissions")
-        except Exception:
-            print(f"Failed model build for {problem_id}")
-            traceback.print_exc()
-            return
+
+    def get_actions_for_event(self, event_type, data, code):
+        action_or_actions = self.intervention.on_event(event_type, data, code)
+        if not isinstance(action_or_actions, list):
+            return [action_or_actions]
+        return action_or_actions
 
     def default_condition_is_intervention(self, id):
         state = str(LOG_DATABASE) + str(id)
@@ -96,7 +100,6 @@ class ExampleIntervention(Resource):
         is_intervention = random.random() < CONDITIONS_INTERVENTION_PROBABILITY
         # print(f"Random condition for {id}: {is_intervention}")
         return is_intervention
-
 
     def is_intervention_group(self, subject_id, problem_id):
         if problem_id in CONDITIONS_MANUALLY_ASSIGNED_PROBLEMS:
@@ -120,39 +123,14 @@ class ExampleIntervention(Resource):
             print(f"Unknown condition assignment: {CONDITIONS_ASSIGNMENT}")
             return True
 
-    def generate_feedback(self, problemID, code):
-        model = self.load_model_from_db(problemID)
-        if model is None:
-            return []
+event_manager = EventManager()
 
-        score = model.predict_proba([code])[0,1]
-
-        html = render_template_string(self.feedback_tempalte,
-            score=score
-        )
-        return [
-            {
-                "action": "ShowDiv",
-                "data": {
-                    "html": html,
-                    "x-score": float(score),
-                }
-            }
-        ]
-
-feedback_generator = ExampleIntervention()
-
-def generate_feedback_from_request():
+def handle_request(event_type: str):
     json = request.get_json()
-    code = json["CodeState"]
-    problem_id = json[PS2.ProblemID]
-    if (PS2.SubjectID in json):
-        subject_id = json[PS2.SubjectID]
-        if (not feedback_generator.is_intervention_group(subject_id, problem_id)):
-            return []
-    else:
-        print("Warning: No SubjectID provided")
-    return feedback_generator.generate_feedback(problem_id, code)
+    actions = event_manager.log_and_get_actions_for_event(event_type, json)
+    print(actions)
+    return actions
+
 
 @app.route('/', methods=['GET'])
 def hello_world():
@@ -160,18 +138,15 @@ def hello_world():
 
 @app.route('/Submit/', methods=['POST'])
 def submit():
-    feedback_generator.log_and_rebuild_model_if_needed(EventType.Submit, request.get_json())
-    return generate_feedback_from_request()
+    return handle_request(EventType.Submit)
 
 @app.route('/FileEdit/', methods=['POST'])
 def file_edit():
-    feedback_generator.log_and_rebuild_model_if_needed(EventType.FileEdit, request.get_json())
-    return generate_feedback_from_request()
+    return handle_request(EventType.FileEdit)
 
 @app.route('/Run.Program/', methods=['POST'])
 def run_program():
-    feedback_generator.log_and_rebuild_model_if_needed(EventType.RunProgram, request.get_json())
-    return []
+    return handle_request(EventType.RunProgram)
 
 # Enable to test efficiency
 # @app.before_request
@@ -183,8 +158,6 @@ def run_program():
 #     diff = time.time() - g.start
 #     print (diff)
 #     return response
-
-# api.add_resource(HelloWorld, '/')
 
 if __name__ == '__main__':
     app.run(port=5500, debug=True)
