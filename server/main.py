@@ -10,7 +10,8 @@ from model.store import ModelStore
 from ps2lib.logger import SQLiteLogger
 from ps2lib.progsnap import ProgSnap2Dataset, PS2, EventType
 from interventions.hello_intervention import HelloIntervention
-from interventions.autograder_intervention import AutograderIntervention
+from interventions.autograder import AutograderIntervention
+from interventions.run_reminder import RunReminder
 
 app = Flask(__name__)
 CORS(app)
@@ -51,7 +52,8 @@ class EventManager(Resource):
         self.model_store = ModelStore(logging_database_path)
         self.model_store.create_models_table()
 
-        self.intervention = HelloIntervention()
+        # self.intervention = HelloIntervention()
+        self.intervention = RunReminder(self.logger)
         # self.intervention = AutograderIntervention(self.model_store)
 
     def log_and_get_actions_for_event(self, event_type, data):
