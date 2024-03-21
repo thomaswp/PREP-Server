@@ -19,10 +19,11 @@ It is suggested to use VSCode to load this repository and a [virtual environment
 
 Take the following steps to install the PREP-Server.
 
-1. Clone the repo.
+1. Clone the repo with submodules (add the `--recursive` flag).
 ```bash
-git clone https://github.ncsu.edu/HINTSLab/SimpleAIF.git
+git clone --recursive https://github.ncsu.edu/HINTSLab/SimpleAIF.git
 ```
+   * If you forget the recursive flag, run `git submodule update --init` after cloning.
 2. Setup a python 3.9 (or greater) environment. On Windows this is easiest using [VS Code](https://code.visualstudio.com/docs/python/environments) (you will need to [use CMD](https://code.visualstudio.com/docs/terminal/profiles) rather than Powershell for your termnial) or [Anaconda](https://conda.io/projects/conda/en/latest/user-guide/tasks/manage-environments.html#activating-an-environment), and on Unix pyenv.
 3. Install the dependencies using the included ``requirements.txt`` file.
 ```bash
