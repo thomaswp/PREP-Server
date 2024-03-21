@@ -4,7 +4,6 @@
 * Visual Studio Code
 * PCRS (University of Toronto)
 * Snap (partial, in progress)
-* 
 
 The PREP-Server is an example server that implements PREP, and includes additional features to aid in the development of interventions:
 * Built-in logging in ProgSnap2 format.
