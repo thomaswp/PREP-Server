@@ -52,8 +52,8 @@ class EventManager(Resource):
         self.model_store = ModelStore(logging_database_path)
         self.model_store.create_models_table()
 
-        # self.intervention = HelloIntervention()
-        self.intervention = RunReminder(self.logger)
+        self.intervention = HelloIntervention()
+        # self.intervention = RunReminder(self.logger)
         # self.intervention = AutograderIntervention(self.model_store)
 
     def log_and_get_actions_for_event(self, event_type, data):
