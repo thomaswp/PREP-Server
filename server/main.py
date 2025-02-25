@@ -130,7 +130,7 @@ event_manager = EventManager()
 def handle_request(event_type: str):
     json = request.get_json()
     actions = event_manager.log_and_get_actions_for_event(event_type, json)
-    print(actions)
+    print("Actions: ", actions)
     return actions
 
 

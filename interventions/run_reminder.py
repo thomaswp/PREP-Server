@@ -11,8 +11,8 @@ class RunReminder(Intervention):
 
     def __init__(self, logger: SQLiteLogger):
         self.logger = logger
-        self.reminder_time_s = 15
-        
+        self.reminder_time_s = 10
+
     def calculate_time_since_last_run(self, problem_id, subject_id):
         # We order by EventID since timestamp is stored as a string
         # for compatibility w/ the PS2 format
@@ -20,15 +20,16 @@ class RunReminder(Intervention):
         SELECT {PS2.ServerTimestamp}
         FROM {MAIN_TABLE}
         WHERE {PS2.ProblemID} = ? AND {PS2.SubjectID} = ? AND
-        ({PS2.EventType} = "{EventType.RunProgram}" OR 
+        ({PS2.EventType} = "{EventType.RunProgram}" OR
         {PS2.EventType} = "{EventType.Submit}" OR
         {PS2.EventType} = "{custom_event_type}")
         ORDER BY {PS2.EventID} DESC
         """
         params = (problem_id, subject_id)
         last_run = self.logger.execute_query(query, params)
-        if last_run is None:
+        if last_run is None or len(last_run) == 0:
             return None
+
         # Get the first (and only) column of the first (and only) row
         parsed = time.strptime(last_run[0][0], "%Y-%m-%dT%H:%M:%S")
         # Get elapsed time since the parsed time
